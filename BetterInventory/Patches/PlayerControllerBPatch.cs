@@ -36,8 +36,9 @@ namespace BetterInventory.Patches
             if(_localPlayer != null && !_localPlayer.twoHanded)
             {
                 EasyInventoryPatch();
-                GlobalFlashlight();
             }
+
+            GlobalFlashlight();
         }
 
         static void EasyInventoryPatch()
