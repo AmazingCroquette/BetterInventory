@@ -1,7 +1,7 @@
-﻿using BepInEx;
-using GameNetcodeStuff;
+﻿using GameNetcodeStuff;
 using HarmonyLib;
 using System.Reflection;
+using UnityEngine;
 
 namespace BetterInventory.Patches
 {
@@ -18,9 +18,6 @@ namespace BetterInventory.Patches
         [HarmonyPostfix]
         static void Start()
         {
-            //doesn't work, happens too early
-            //_localPlayer = GameNetworkManager.Instance.localPlayerController;
-
             _switchToItemMethod = typeof(PlayerControllerB).GetMethod("SwitchToItemSlot", BindingFlags.NonPublic | BindingFlags.Instance);
         }
 
@@ -28,22 +25,24 @@ namespace BetterInventory.Patches
         [HarmonyPostfix]
         static void UpdatePatch()
         {
-            if (_localPlayer == null)
+            if (!(_localPlayer = GameNetworkManager.Instance.localPlayerController))
             {
-                _localPlayer = GameNetworkManager.Instance.localPlayerController;
+                return;
             }
 
-            if(_localPlayer != null && !_localPlayer.twoHanded)
-            {
-                EasyInventoryPatch();
-            }
-
+            EasyInventoryPatch();
             GlobalFlashlight();
+            ToggleSwapMode();
         }
 
         static void EasyInventoryPatch()
         {
-            object[] parameters = new object[] {null, null};
+            if (_localPlayer.twoHanded || _localPlayer.inTerminalMenu)
+            {
+                return;
+            }
+
+            object[] parameters = new object[] { null, null };
 
             _localPlayer = GameNetworkManager.Instance.localPlayerController;
 
@@ -77,22 +76,115 @@ namespace BetterInventory.Patches
 
         static void GlobalFlashlight()
         {
+            if (_localPlayer.inTerminalMenu)
+            {
+                return;
+            }
+
             if (globalFlashlightInputSystem.GlobalFlashlightKey.triggered)
             {
-                for(int i = 0; i < _localPlayer.ItemSlots.Length; i++)
+                for (int i = 0; i < _localPlayer.ItemSlots.Length; i++)
                 {
-                    if(_localPlayer.ItemSlots[i] is FlashlightItem)
+                    if (_localPlayer.ItemSlots[i] is FlashlightItem)
                     {
-                        GrabbableObject flashlight = _localPlayer.ItemSlots[i];
-
-                        flashlight.UseItemOnClient();
-                        if(_localPlayer.currentItemSlot != i)
+                        FlashlightItem flashlight = _localPlayer.ItemSlots[i] as FlashlightItem;
+                        if (flashlight.insertedBattery.charge > 0)
                         {
-                            flashlight.PocketItem();
+                            flashlight.UseItemOnClient();
+                            if (_localPlayer.currentItemSlot != i)
+                            {
+                                flashlight.PocketItem();
+                            }
+                            break;
                         }
-                        break;
                     }
                 }
+            }
+        }
+
+        static bool swapModeActive = false;
+        static void ToggleSwapMode()
+        {
+            if (_localPlayer.twoHanded || _localPlayer.inTerminalMenu)
+            {
+                if (swapModeActive)
+                {
+                    DeactivateSwapMode();
+                }
+                return;
+            }
+
+            if (SwapModeInputClass.Instance.SwapModeKey.triggered)
+            {
+                if (!swapModeActive) //activate swap mode
+                {
+                    ActivateSwapMode();
+                }
+                else
+                {
+                    DeactivateSwapMode();
+                }
+            }
+        }
+
+        static int initialSwapIndex = -1;
+        static Color _inventoryFrameColor = Color.black;
+
+        [HarmonyPatch("SwitchToItemSlot")]
+        [HarmonyPrefix]
+        static void ManageSwapMode(int slot, ref GrabbableObject fillSlotWithItem)
+        {
+            if (!swapModeActive || _localPlayer.twoHanded)
+            {
+                return;
+            }
+
+            int newSwapIndex = slot;
+
+            GrabbableObject swap1 = _localPlayer.ItemSlots[initialSwapIndex];
+            GrabbableObject swap2 = _localPlayer.ItemSlots[newSwapIndex];
+
+            DeactivateSwapMode();
+
+            ChangeItemInSlot(initialSwapIndex, swap2);
+            ChangeItemInSlot(newSwapIndex, swap1);
+        }
+
+        static void ActivateSwapMode()
+        {
+            if (_inventoryFrameColor == Color.black) //base color is not black (currently)
+            {
+                _inventoryFrameColor = HUDManager.Instance.itemSlotIconFrames[_localPlayer.currentItemSlot].color;
+            }
+
+            swapModeActive = true;
+            initialSwapIndex = _localPlayer.currentItemSlot;
+
+            //change frame color to highlight swap mode
+            HUDManager.Instance.itemSlotIconFrames[_localPlayer.currentItemSlot].color = Color.green;
+
+            //cancel inventory fade out
+            _localPlayer.StopCoroutine(HUDManager.Instance.Inventory.fadeCoroutine);
+            HUDManager.Instance.Inventory.targetAlpha = 1f;
+        }
+
+        static void DeactivateSwapMode()
+        {
+            //fade inventory
+            HUDManager.Instance.PingHUDElement(HUDManager.Instance.Inventory, 1.5f, 1f, 0.13f);
+            HUDManager.Instance.itemSlotIconFrames[initialSwapIndex].color = _inventoryFrameColor;
+
+            swapModeActive = false;
+        }
+
+        static void ChangeItemInSlot(int slotIndex, GrabbableObject newObject)
+        {
+            _switchToItemMethod.Invoke(_localPlayer, new object[] { slotIndex, newObject });
+
+            if (newObject == null)
+            {
+                _localPlayer.ItemSlots[slotIndex] = null;
+                HUDManager.Instance.itemSlotIcons[slotIndex].enabled = false;
             }
         }
     }

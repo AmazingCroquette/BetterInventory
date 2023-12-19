@@ -31,6 +31,7 @@ namespace BetterInventory
             harmony.PatchAll(typeof(PlayerControllerBPatch));
             harmony.PatchAll(typeof(EasyInventoryInputClass));
             harmony.PatchAll(typeof(GlobalFlashlightInputClass));
+            harmony.PatchAll(typeof(SwapModeInputClass));
         }
 
         static ManualLogSource GetLogger()
