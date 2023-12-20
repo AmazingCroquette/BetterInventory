@@ -23,3 +23,7 @@ When enabled, swap modes highlights the current slot and waits for the next inpu
 - The inventory previous and next bindings to move the current item wherever you want it to go. Swap mode needs to be disabled manually.
 
 \**Swap Mode doesn't work while transporting heavy objects or while using the terminal*
+
+## Known issues
+- Inventory doesn't fade out correctly while using and after using the Swap Mode
+- Sometimes, the borders' color becomes black after using swap mode
