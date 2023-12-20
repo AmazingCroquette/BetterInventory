@@ -35,6 +35,7 @@ namespace BetterInventory.Patches
             ToggleSwapMode();
         }
 
+        static bool _shouldDeactivateSwapMode = false;
         static void EasyInventoryPatch()
         {
             if (_localPlayer.twoHanded || _localPlayer.inTerminalMenu)
@@ -71,6 +72,7 @@ namespace BetterInventory.Patches
             if (parameters[0] != null)
             {
                 _switchToItemMethod.Invoke(_localPlayer, parameters);
+                _shouldDeactivateSwapMode = true;
             }
         }
 
@@ -125,10 +127,17 @@ namespace BetterInventory.Patches
                     DeactivateSwapMode();
                 }
             }
+
+            if (_shouldDeactivateSwapMode)
+            {
+                DeactivateSwapMode();
+            }
         }
 
         static int initialSwapIndex = -1;
         static Color _inventoryFrameColor = Color.black;
+
+        static bool skipNextCall = false;
 
         [HarmonyPatch("SwitchToItemSlot")]
         [HarmonyPrefix]
@@ -139,15 +148,48 @@ namespace BetterInventory.Patches
                 return;
             }
 
+            if (skipNextCall) //swap uses same function, need to skip some calls
+            {
+                skipNextCall = false;
+                return;
+            }
+
             int newSwapIndex = slot;
 
             GrabbableObject swap1 = _localPlayer.ItemSlots[initialSwapIndex];
             GrabbableObject swap2 = _localPlayer.ItemSlots[newSwapIndex];
 
-            DeactivateSwapMode();
-
+            skipNextCall = true;
             ChangeItemInSlot(initialSwapIndex, swap2);
+            skipNextCall = true;
             ChangeItemInSlot(newSwapIndex, swap1);
+
+            if (!_shouldDeactivateSwapMode)
+            {
+                //setup swap for new slot
+                SelectSwapSlot();
+                initialSwapIndex = newSwapIndex;
+            }
+        }
+
+        [HarmonyPatch("SwitchToItemSlot")]
+        [HarmonyPostfix]
+        static void PostSlotSwitch()
+        {
+            //cancel inventory fade out
+            _localPlayer.StopCoroutine(HUDManager.Instance.Inventory.fadeCoroutine);
+            HUDManager.Instance.Inventory.targetAlpha = 1f;
+        }
+
+        static void SelectSwapSlot()
+        {
+            //change frames color to highlight swap mode
+            for (int i = 0; i < _localPlayer.ItemSlots.Length; i++)
+            {
+                Color frameColor = (i == _localPlayer.currentItemSlot) ? Color.green : Color.gray;
+
+                HUDManager.Instance.itemSlotIconFrames[i].color = frameColor;
+            }
         }
 
         static void ActivateSwapMode()
@@ -158,21 +200,22 @@ namespace BetterInventory.Patches
             }
 
             swapModeActive = true;
+            _shouldDeactivateSwapMode = false;
             initialSwapIndex = _localPlayer.currentItemSlot;
 
-            //change frame color to highlight swap mode
-            HUDManager.Instance.itemSlotIconFrames[_localPlayer.currentItemSlot].color = Color.green;
-
-            //cancel inventory fade out
-            _localPlayer.StopCoroutine(HUDManager.Instance.Inventory.fadeCoroutine);
-            HUDManager.Instance.Inventory.targetAlpha = 1f;
+            SelectSwapSlot();
         }
 
         static void DeactivateSwapMode()
         {
             //fade inventory
             HUDManager.Instance.PingHUDElement(HUDManager.Instance.Inventory, 1.5f, 1f, 0.13f);
-            HUDManager.Instance.itemSlotIconFrames[initialSwapIndex].color = _inventoryFrameColor;
+
+            //reset slots color
+            for (int i = 0; i < _localPlayer.ItemSlots.Length; i++)
+            {
+                HUDManager.Instance.itemSlotIconFrames[i].color = _inventoryFrameColor;
+            }
 
             swapModeActive = false;
         }
