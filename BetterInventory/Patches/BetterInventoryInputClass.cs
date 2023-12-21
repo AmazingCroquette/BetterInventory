@@ -14,6 +14,10 @@ namespace BetterInventory.Patches
         [InputAction("<Keyboard>/4", Name = "Inventory 4")]
         public InputAction Inventory4Key { get; set; }
 
+        public override void CreateInputActions(in InputActionMapBuilder builder)
+        {
+            BetterInventory.logger.LogInfo("Creating Input Actions");
+        }
 
         public static EasyInventoryInputClass Instance = new EasyInventoryInputClass();
     }
