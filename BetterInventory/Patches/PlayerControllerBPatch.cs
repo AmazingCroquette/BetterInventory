@@ -69,8 +69,14 @@ namespace BetterInventory.Patches
             if (parameters[0] != null)
             {
                 //BetterInventory.logger.LogInfo("EasyInventory called");
+                //_localPlayer.currentItemSlot;
                 _switchToItemMethod.Invoke(_localPlayer, parameters);
                 _shouldDeactivateSwapMode = true;
+
+                /*
+                SwitchToItemSlot(NextItemSlot(forward: true));
+				SwitchItemSlotsServerRpc(forward: true);
+                */
             }
         }
 
